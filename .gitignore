@@ -1,0 +1,8 @@
+*.ignore
+*.bin
+*.bmp
+*.png
+*.pyc
+dumps
+__pycache__
+.vscode

@@ -11,6 +11,7 @@ import sys
 import os
 import codecs
 from math import ceil
+
 # PNG support by PIL (if installed)
 try:
     from PIL import Image
@@ -18,29 +19,6 @@ try:
 except ImportError:
     PIL = False
     print("WARN: Python Imaging Library not found! Only BMP output will supported")
-
-
-if len(sys.argv) > 1:
-    filename = sys.argv[1]
-else:
-    print("ERROR: filename must be specified")
-    sys.exit()
-
-if len(sys.argv) > 2:
-    enctype = str(sys.argv[2])
-else:
-    print("ERROR: coding type must be specified! Posible values rbr (row by row) and cbc (column by column)")
-    sys.exit()
-
-if len(sys.argv) > 3:
-    width = int(sys.argv[3])
-else:
-    width = 0
-
-if len(sys.argv) > 4:
-    height = int(sys.argv[4])
-else:
-    height = 0
 
 
 def decode(encoded, enclen):
@@ -64,14 +42,14 @@ def decode(encoded, enclen):
                 rpt = 1
             # reading of folowing pixel(s)
             for c in range(cnt):
-                pixel = [encoded[pos+3], encoded[pos+2], encoded[pos+1], encoded[pos]] # ABGR to RGBA
+                pixel = (encoded[pos+3], encoded[pos+2], encoded[pos+1], encoded[pos]) # ABGR to RGBA
                 pos+=4
                 if pos > enclen: print("ERROR: unexpected eof at", pos); break
                 for r in range(rpt):
                     decoded.append(pixel)
     return decoded
 
-def transposition(decoded, width, height, enctype):
+def transposition(decoded, declen, width, height, enctype):
     pxdict = {}
     # enctype
     rbr = False; cbc = False
@@ -97,8 +75,8 @@ def transposition(decoded, width, height, enctype):
     w = wbeg
     h = hbeg
     #
-    for px in range(px_len):
-        pxdict[w, h] = (decoded[px][0], decoded[px][1], decoded[px][2], decoded[px][3])
+    for px in range(declen):
+        pxdict[w, h] = decoded[px]
         if rbr: w+=wstep
         if cbc: h+=hstep
         if w >= width or w < 0: w = wbeg; h+=hstep
@@ -139,47 +117,70 @@ def saveimage(filename, bitmap, width, height):
                     pixels.append(bitmap[x,y][0])
                     pixels.append(bitmap[x,y][3])
             fo.write(pixels)
-        fo.close()
 
 
-with open(filename, "rb") as fi:
-    # read encoded file
-    filesize = os.path.getsize(filename)
-    enclen = 262144 # 256KB block
-    if enclen > filesize : enclen = filesize
-    encoded = fi.read(enclen)
+def main(filename, enctype, width, height):
+    with open(filename, "rb") as fi:
+        # read encoded file
+        filesize = os.path.getsize(filename)
+        enclen = 262144 # 256KB block
+        if enclen > filesize : enclen = filesize
+        encoded = fi.read(enclen)
 
-    # decode data
-    decoded = decode(encoded, enclen)
+        # decode data
+        decoded = decode(encoded, enclen)
+        declen = len(decoded)
 
-    # guess unknown width or height
-    px_len = len(decoded)
-    if px_len > 0:
-        if height == 0:
-            if px_len > 65536: print("ERROR: image can not be bigger than 256x256")
-            print("WARN: height not specified! let me guess it for px_len =", px_len)
-            if width == 0:
-                # begin search from 10px
-                for w in range(10, 240):
-                    width = w
-                    height = px_len / width
-                    if px_len % width == 0 and width < 255 and height > 0 and height < 255: break
-            else:
-                height = px_len / width
-            if height % 1 == 0: height = int(height)
-            if width * ceil(height) > px_len: print ("WARN: cannot find proper width and height!"); width = 255; height = 255
-            print("width =", width, "height =", height)
+        # guess unknown width or height
+        if declen > 0:
+            if height == 0:
+                if declen > 65536: print("ERROR: image can not be bigger than 256x256")
+                print("WARN: height not specified! let me guess it for px_len =", declen)
+                if width == 0:
+                    # begin search from 10px
+                    for w in range(10, 240):
+                        width = w
+                        height = declen / width
+                        if declen % width == 0 and width < 255 and height > 0 and height < 255: break
+                else:
+                    height = declen / width
+                if height % 1 == 0: height = int(height)
+                if width * ceil(height) > declen: print ("WARN: cannot find proper width and height!"); width = 255; height = 255
+                print("width =", width, "height =", height)
 
-    # transform decoded data to pixels dictionary
-    bitmap = transposition(decoded, width, height, enctype)
+        # transform decoded data to pixels dictionary
+        bitmap = transposition(decoded, declen, width, height, enctype)
 
-    # remove extension
-    point = filename.rfind('.')
-    if len(filename) - point < 8: filename_out = filename[:point]
-    else: filename_out = filename
+        # remove extension
+        point = filename.rfind('.')
+        if len(filename) - point < 8: filename_out = filename[:point]
+        else: filename_out = filename
 
-    # save into popular graphical format
-    saveimage(filename_out, bitmap, width, height)
+        # save into popular graphical format
+        saveimage(filename_out, bitmap, width, height)
 
-#print("Complete")
-#input()
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
+    else:
+        print("ERROR: filename must be specified")
+        sys.exit()
+
+    if len(sys.argv) > 2:
+        enctype = str(sys.argv[2])
+    else:
+        print("ERROR: coding type must be specified! Posible values rbr (row by row) and cbc (column by column)")
+        sys.exit()
+
+    if len(sys.argv) > 3:
+        width = int(sys.argv[3])
+    else:
+        width = 0
+
+    if len(sys.argv) > 4:
+        height = int(sys.argv[4])
+    else:
+        height = 0
+
+    main(filename, enctype, width, height)
