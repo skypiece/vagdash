@@ -21,6 +21,13 @@ except ImportError:
     print("WARN: Python Imaging Library not found! Only BMP output will supported")
 
 
+def int_to_bytes(val, num_bytes, endian): # int to binary on both Pythons
+    if endian == "little":
+        return [(val & (0xff << pos*8)) >> pos*8 for pos in range(num_bytes)]
+    elif endian == "big":
+        return [(val & (0xff << pos*8)) >> pos*8 for pos in reversed(range(num_bytes))]
+
+
 def decode(encoded, enclen):
     pos = 0
     decoded = []
@@ -98,12 +105,11 @@ def saveimage(filename, bitmap, width, height):
             for i in range(54): header.append(0x00)
             header[0] = 0x42
             header[1] = 0x4D
-            #TODO size
+            header = header[:2] + bytearray(int_to_bytes(54+4*width*height, 3, "little")) + header[5:]
             header[10] = 0x36 # BMoffset
             header[14] = 0x28
-            #TODO more than 1-byte size support
-            header[18] = width
-            header[22] = height
+            header = header[:18] + bytearray(int_to_bytes(width, 2, "little")) + header[20:]
+            header = header[:22] + bytearray(int_to_bytes(height, 2, "little")) + header[24:]
             header[26] = 0x01
             header[28] = 0x20 # 32 bits
             fo.write(header)
