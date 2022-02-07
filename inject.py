@@ -1,17 +1,17 @@
 # VAG Premium Color dashboard image injector
 # https://github.com/skypiece/vagdash
 #
-# python inject.py filename PIT_offset enctype
-# python inject.py 0506.bin 0x48E89C cbch
-# python inject.py 0611.bin 0xCA0C18 rbrhv
-# python inject.py 1104.bin 0xCA2F30 rbrhv
-# python inject.py 2030.bin 0xCA305C rbrhv
+# python inject.py filename
+#         optional arguments --offset, --enctype, --picdir
+# python inject.py 0506.bin --offset 0x48E89C --enctype cbch
+# python inject.py 0611.bin --offset 0xCA0C18 --enctype rbrhv
+# python inject.py 1104.bin
+# python inject.py 2030.bin
 #
 # cbch  bitmaps stored column by column with horizontal flip
 # rbrhv bitmaps stored row by row with horizontal and vertical flip
 import sys
 import os
-from shutil import copyfile
 import datetime
 from math import ceil
 from encode import encode, transposition, loadimage
@@ -33,15 +33,10 @@ def int_to_bytes(val, num_bytes, endian): # int to binary on both Pythons
         return [(val & (0xff << pos*8)) >> pos*8 for pos in reversed(range(num_bytes))]
 
 
-def main(filename, offset, enctype):
-    print("Trying to build " + filename + " at PIT offset = " + str(offset) + " with enctype = " + enctype)
+def main(filename, offset, enctype, picdir):
+    print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " Trying to build " + filename + " with enctype = " + enctype)
     
-    pit = []
-    pb = bytearray()
-    pib = bytearray()
-    pos = 0
-    loc = 0
-
+    # process existing dump
     dump = readdump(filename)
     if offset < 0: offset = findpit(dump)
     pit_loc = offset
@@ -53,22 +48,28 @@ def main(filename, offset, enctype):
     else: filename_out = filename
     
     # directories management
-    filedir = os.path.dirname(filename)
-    # for pictures
-    if PIL: filedir_pic = os.path.join(filedir, "png")
-    else: filedir_pic = os.path.join(filedir, "bmp")
-    if not os.path.exists(filedir_pic): os.makedirs(filedir_pic)
-
-    # prepare dump for modifications
+    if not picdir: picdir = os.path.dirname(filename)
+    # for pictures output
+    if PIL: picdir_pic = os.path.join(picdir, "png")
+    else: picdir_pic = os.path.join(picdir, "bmp")
+    if not os.path.exists(picdir_pic): os.makedirs(picdir_pic)
+    # new dump
     filename_new = filename_out + datetime.datetime.now().strftime("-%Y%m%d%H%M%S") + ".bin"
-    copyfile(filename, filename_new)
-    
-    #TODO need to use dump from memory
-    with open(filename_new, "r+b") as fo:
-        for filename in os.listdir(filedir_pic):
+
+    # process new dump
+    with open(filename_new, "wb") as fo:
+        # copy old data
+        fo.write(dump)
+
+        pit = []
+        pb = bytearray()
+        pib = bytearray()
+        pos = 0
+        loc = 0
+        for filename in os.listdir(picdir_pic):
             if filename.lower().endswith(".png") or filename.lower().endswith(".bmp"):
                 # load from popular graphical format
-                bitmap, width, height = loadimage(os.path.join(filedir_pic, filename))
+                bitmap, width, height = loadimage(os.path.join(picdir_pic, filename))
 
                 # transform pixels dictionary to decoded data
                 decoded = transposition(bitmap, width, height, enctype)
@@ -94,6 +95,7 @@ def main(filename, offset, enctype):
                 else:
                     mb = 0x0B
                     size_len = 1
+                #TODO move PIB from PIT creation to function
                 pib.append(mb)
                 pib+=bytearray(int_to_bytes(loc, 3, "little"))
                 pib+=bytearray(int_to_bytes(enclen, size_len+1, "little"))
@@ -106,10 +108,10 @@ def main(filename, offset, enctype):
                 
                 loc+=enclen + extlen
                 pos+=1
-        # some cheks
+        # some checks
         # TODO need to cover more cases
         if pit[-1]["pit_loc"] > pit_old[-1]["pit_loc"]: print("ERROR: new PIT bigger than old one! Reduce picture sizes"); sys.exit()
-        if pit[-1]["loc"]+pit[-1]["len"] > pit_old[-1]["loc"]+pit_old[-1]["len"]: print("WARN: new PB bigger than old one! Check free space on a dump")
+        if pit[-1]["loc"]+pit[-1]["len"] > pit_old[-1]["loc"]+pit_old[-1]["len"]: print("WARN: new PB bigger than old one! Check free space on a dump manually")
         # write PIB
         fo.seek(offset)
         fo.write(pib)
@@ -117,25 +119,26 @@ def main(filename, offset, enctype):
         fo.seek(8)
         fo.write(pb)
 
-    print("Complete")
+    print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " Complete")
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
+    # defaults
+    offset = -1
+    enctype = "rbrhv"
+
+    i = 1
+    while i < len(sys.argv):
+        if sys.argv[i].startswith("--"):
+            if sys.argv[i] == "--offset": offset = int(sys.argv[i+1], base=16); i+=1
+            if sys.argv[i] == "--enctype": enctype = sys.argv[i+1]; i+=1
+            if sys.argv[i] == "--picdir": picdir = sys.argv[i+1]; i+=1
+        i+=1
+
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("--"):
         filename = sys.argv[1]
     else:
         print("ERROR: filename must be specified")
         sys.exit()
 
-    if len(sys.argv) > 2:
-        offset = int(sys.argv[2], base=16)
-    else:
-        offset = -1
-
-    if len(sys.argv) > 3:
-        enctype = sys.argv[3]
-    else:
-        print("ERROR: autodetection of bitmap orientation is not supported yet")
-        sys.exit()
-
-    main(filename, offset, enctype)
+    main(filename, offset, enctype, picdir)

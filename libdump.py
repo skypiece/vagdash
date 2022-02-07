@@ -5,13 +5,15 @@ import codecs
 
 def readdump(filename):
     with open(filename, "rb") as fi:
-        return fi.read()
+        return bytearray(fi.read())
 
 def findpit(dump):
     offset = -1
-    pos = dump.find(bytearray.fromhex("0001000409"))
+    mb = bytearray.fromhex("0001000409") # "".join(map(chr, mb))
+    pos = dump.find(mb)
     if dump[pos-10] == 0x0C: offset = pos-10
     elif dump[pos-8] == 0x0B: offset = pos-8
+    print("PIT found at offset="+str(offset))
     return offset
 
 def loadpit(dump, offset):
