@@ -61,7 +61,7 @@ def main(filename, offset, enctype, picdir):
         # copy old data
         fo.write(dump)
 
-        pit = []
+        pics = []
         pb = bytearray()
         pib = bytearray()
         pos = 0
@@ -83,8 +83,8 @@ def main(filename, offset, enctype, picdir):
                 for i in range(extlen):
                     encoded.append(0x00)
                 
-                # append to pit
-                pit.append({"pos": pos, "width": width, "height": height, "pit_loc": pit_loc, "loc": loc, "len": enclen})
+                # append to pics
+                pics.append({"pos": pos, "width": width, "height": height, "pit_loc": pit_loc, "loc": loc, "len": enclen})
                 info = "pos = "+str(pos)+"\twidth = "+str(width)+"\theight = "+str(height)+"\tlocation = "+str(loc)+"\tlength = "+str(enclen)
                 print(info)
 
@@ -110,13 +110,13 @@ def main(filename, offset, enctype, picdir):
                 pos+=1
         # some checks
         # TODO need to cover more cases
-        if pit[-1]["pit_loc"] > pit_old[-1]["pit_loc"]: print("ERROR: new PIT bigger than old one! Reduce picture sizes"); sys.exit()
-        if pit[-1]["loc"]+pit[-1]["len"] > pit_old[-1]["loc"]+pit_old[-1]["len"]: print("WARN: new PB bigger than old one! Check free space on a dump manually")
+        if pics[-1]["pit_loc"] > pit_old["pics"][0][-1]["pit_loc"]: print("ERROR: new PIT bigger than old one! Reduce picture sizes"); sys.exit()
+        if pics[-1]["loc"]+pics[-1]["len"] > pit_old["pics"][0][-1]["loc"]+pit_old["pics"][0][-1]["len"]: print("WARN: new PB bigger than old one! Check free space on a dump manually")
         # write PIB
         fo.seek(offset)
         fo.write(pib)
         # write PB
-        fo.seek(8)
+        fo.seek(pit_old["pb_offset"])
         fo.write(pb)
 
     print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " Complete")
@@ -126,6 +126,7 @@ if __name__ == '__main__':
     # defaults
     offset = -1
     enctype = "rbrhv"
+    picdir = None
 
     i = 1
     while i < len(sys.argv):

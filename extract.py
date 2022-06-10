@@ -4,7 +4,9 @@
 # python extract.py filename
 #         optional arguments --offset, --enctype, --picdir, --savebin
 # python extract.py 0506.bin --offset 0x48E89C --enctype cbch --savebin 1
+# python extract.py 0506.bin --offset 0x49077C --enctype cbch
 # python extract.py 0611.bin --offset 0xCA0C18 --enctype rbrhv
+# python extract.py 0611.bin --offset 0xCA2CC8 --enctype rbrhv
 # python extract.py 1104.bin
 # python extract.py 2030.bin
 #
@@ -30,7 +32,7 @@ def main(filename, offset, enctype, save_bin, picdir):
 
     dump = readdump(filename)
 
-    if offset < 0: offset = findpit(dump)
+    if not offset: offset = findpit(dump)
 
     pit = loadpit(dump, offset)
 
@@ -51,32 +53,35 @@ def main(filename, offset, enctype, save_bin, picdir):
 
     # PIT processing
     with open(filename_out + ".txt", "w") as foi:
-        foi.write("### picture location need shift by +8 in real dump\n### rest of location/8 (Modulo) must be 0\n")
-        for pic in pit:
-            info = "pos = "+str(pic["pos"])+"\twidth = "+str(pic["width"])+"\theight = "+str(pic["height"])+"\tpit_location = "+str(pic["pit_loc"])+"\tlocation = "+str(pic["loc"])+"\tlength = "+str(pic["len"])
+        info = "### picture location need shift by +" + str(pit["pb_offset"]) + " in real dump\n### rest of location/8 (Modulo) must be 0\n"
+        print(info)
+        foi.write(info+"\n")
+        for pic in pit["pics"]:
+            info = "pos = "+str(pic["pos"])+"\twidth = "+str(pic["width"])+"\theight = "+str(pic["height"])+"\tpit_location = "+str(pic["pit_loc"])+"\tlocation = "+str(pic["loc"])+"\tlength = "+str(pic["len"])+"\tmeta = "+str(pic["meta"])
             print(info)
             foi.write(info+"\n")
             # read encoded data
-            encoded = dump[pic["loc"]+8 : pic["loc"]+pic["len"]+8]
+            encoded = dump[pic["loc"]+pit["pb_offset"] : pic["loc"]+pic["len"]+pit["pb_offset"]]
             # save to another bin file
             if save_bin == 1:
                 with open(os.path.join(picdir_bin, str(pic["pos"]).zfill(4) + ".bin"), "wb") as fo:
                     fo.write(encoded)
             # decode data
-            decoded = decode(encoded, pic["len"])
-            declen = len(decoded)
-            # transform decoded data to pixels dictionary
-            bitmap = transposition(decoded, declen, pic["width"], pic["height"], enctype)
-            # save into popular graphical format
-            saveimage(os.path.join(picdir_pic, str(pic["pos"]).zfill(4)), bitmap, pic["width"], pic["height"])
+            decoded = decode(encoded, pic["len"], pic["meta"])
+            if decoded is not None:
+                declen = len(decoded)
+                # transform decoded data to pixels dictionary
+                bitmap = transposition(decoded, declen, pic["width"], pic["height"], enctype)
+                # save into popular graphical format
+                saveimage(os.path.join(picdir_pic, str(pic["pos"]).zfill(4)), bitmap, pic["width"], pic["height"])
 
     print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " Complete")
 
 
 if __name__ == '__main__':
     # defaults
-    offset = -1
-    enctype = "rbrhv"
+    offset = None
+    enctype = None
     savebin = 0
     picdir = ""
 
@@ -86,13 +91,19 @@ if __name__ == '__main__':
             if sys.argv[i] == "--offset": offset = int(sys.argv[i+1], base=16); i+=1
             if sys.argv[i] == "--enctype": enctype = sys.argv[i+1]; i+=1
             if sys.argv[i] == "--picdir": picdir = sys.argv[i+1]; i+=1
-            if sys.argv[i] == "--savebin": savebin = sys.argv[i+1]; i+=1
+            if sys.argv[i] == "--savebin": savebin = int(sys.argv[i+1], base=16); i+=1
         i+=1
 
     if len(sys.argv) > 1 and not sys.argv[1].startswith("--"):
         filename = sys.argv[1]
+        filesize = os.path.getsize(filename)
     else:
         print("ERROR: filename must be specified")
         sys.exit()
+
+    if filesize <= 8388608 and enctype is None:
+        enctype = "cbch"
+    else:
+        enctype = "rbrhv"
 
     main(filename, offset, enctype, savebin, picdir)

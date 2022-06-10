@@ -28,9 +28,19 @@ def int_to_bytes(val, num_bytes, endian): # int to binary on both Pythons
         return [(val & (0xff << pos*8)) >> pos*8 for pos in reversed(range(num_bytes))]
 
 
-def decode(encoded, enclen):
+def decode(encoded, enclen, meta):
     pos = 0
     decoded = []
+    # meta processing
+    if not meta: meta4 = 9  # default
+    else:  meta4 = meta[4] #int(codecs.encode(meta[4: 5], 'hex'), 16)
+    # Color Depth
+    if meta4 == 9:   depth = 4
+    elif meta4 == 8: depth = 2
+    else:
+        print("WARNING: unknown meta4 value")
+        return
+
     while pos < enclen:
         num = encoded[pos]
         if type(num) is str: num = int(codecs.encode(num, 'hex'), 16) # binary to int on Python 2
@@ -47,13 +57,21 @@ def decode(encoded, enclen):
                 # need to copy N follow pixels as is
                 cnt = num
                 rpt = 1
-            # reading of folowing pixel(s)
-            for c in range(cnt):
-                pixel = (encoded[pos+3], encoded[pos+2], encoded[pos+1], encoded[pos]) # ABGR to RGBA
-                pos+=4
-                if pos > enclen: print("ERROR: unexpected eof at", pos); break
-                for r in range(rpt):
-                    decoded.append(pixel)
+            try:
+                # reading of folowing pixel(s)
+                for c in range(cnt):
+                    if depth == 4:
+                        pixel = (encoded[pos+3], encoded[pos+2], encoded[pos+1], encoded[pos]) # RGBA to RGBA
+                        pos+=4
+                    elif depth == 2:
+                        pixel = (int(255*(encoded[pos+1] >> 3)/31), int(255 * (((encoded[pos+1] & ~248) << 3) | (encoded[pos] >> 5)) /63), int(255*(encoded[pos] & ~224)/31), 255)  # RGB565 to RGBA
+                        pos+=2
+                    if pos > enclen: print("ERROR: unexpected eof at", pos); break
+                    for r in range(rpt):
+                        decoded.append(pixel)
+            except IndexError:
+                print("ERROR: Could not decode image")
+                break
     return decoded
 
 def transposition(decoded, declen, width, height, enctype):
@@ -94,9 +112,13 @@ def saveimage(filename, bitmap, width, height):
     if PIL:
         img = Image.new('RGBA', (width, height)) # Create a new empty image
         pixels = img.load() # Create the pixel map
-        for x in range(width):
-            for y in range(height):
-                pixels[x,y] = bitmap[x,y]
+        try:
+            for x in range(width):
+                for y in range(height):
+                    pixels[x, y] = bitmap[x, y]
+        except KeyError:
+            print("ERROR: Could not same image")
+            return
         img.save(filename + ".png")
     else:
         with open(filename + ".bmp", "wb") as fo:
@@ -134,7 +156,7 @@ def main(filename, enctype, width, height):
         encoded = fi.read(enclen)
 
         # decode data
-        decoded = decode(encoded, enclen)
+        decoded = decode(encoded, enclen, None)
         declen = len(decoded)
 
         # guess unknown width or height
